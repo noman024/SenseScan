@@ -1,5 +1,8 @@
 ## SenseScan
 
+- **Author:** MD Mutasim Billah Noman
+- **Updated:** 2/26/2026
+
 SenseScan is a lightweight web UI for an OCR (Optical Character Recognition) backend service.
 It is built with Gradio and talks to a FastAPI server that exposes an `/ml/ocr` endpoint.
 
@@ -31,25 +34,20 @@ You are expected to run a separate OCR FastAPI server that implements the `/ml/o
 ## Installation
 
 1. **Clone the repository**
-
-   ```bash
-   git clone <YOUR_REPO_URL> SenseScan
+  ```bash
+   git clone https://github.com/noman024/SenseScan.git
    cd SenseScan
-   ```
-
+  ```
 2. **Create and activate a virtual environment** (recommended)
-
-   ```bash
+  ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
+  ```
 3. **Install dependencies**
-
-   ```bash
+  ```bash
    pip install --upgrade pip
    pip install -r requirements.txt
-   ```
+  ```
 
 ---
 
@@ -58,19 +56,19 @@ You are expected to run a separate OCR FastAPI server that implements the `/ml/o
 The UI needs to know where your **OCR FastAPI dev server** is running.
 
 - **Environment variable**: `OCR_DEV_BASE_URL`
-- **Default**: `http://100.116.65.82:9192`
+- **Default**: `http://your-deployed-ip:port`
 
 Examples:
 
 ```bash
-export OCR_DEV_BASE_URL="http://localhost:9192"
+export OCR_DEV_BASE_URL="http://your-deployed-ip:port"
 python dev_ocr_ui.py
 ```
 
 Or in a single command:
 
 ```bash
-OCR_DEV_BASE_URL="http://localhost:9192" python dev_ocr_ui.py
+OCR_DEV_BASE_URL="http://your-deployed-ip:port" python dev_ocr_ui.py
 ```
 
 The UI will call:
@@ -109,11 +107,11 @@ Once started, open the printed URL in your browser.
 2. **Upload an image** (preferred) or a **PDF**.
 3. Click **“Run OCR”**.
 4. Inspect the results in the tabs:
-   - **Markdown**: recognized text content, with inline images rendered.
-   - **Visualized Image**: layout visualization returned by the backend.
-   - **JSON**: raw structured output from the OCR service.
+  - **Markdown**: recognized text content, with inline images rendered.
+  - **Visualized Image**: layout visualization returned by the backend.
+  - **JSON**: raw structured output from the OCR service.
 
-For each input, the app saves everything under a **`data/`** directory:
+For each input, the app saves everything under a `**data/`** directory:
 
 - Creates `data/<name>/` (e.g. `data/mydoc/`)
 - Saves there:
@@ -131,23 +129,17 @@ For each input, the app saves everything under a **`data/`** directory:
 - The OCR call logic lives in `call_ocr_endpoint()` and expects a ZIP response structure as described above.
 - Image artifacts created from inline base64 data URIs are stored as `inline_*.png`/`.jpg`/`.gif` in `data/<input_name>/`.
 
-If you change the backend contract (e.g. different endpoint or response format), update `call_ocr_endpoint()` accordingly.
+If you change the backend contract (e.g., different endpoint or response format), update `call_ocr_endpoint()` accordingly.
 
 ---
 
 ## Troubleshooting
 
 - **No file uploaded**: Ensure you upload either an image or a PDF before clicking **Run OCR**.
-- **Connection / timeout errors**:
+- **Connection/timeout errors**:
   - Check that your OCR FastAPI server is running.
   - Verify `OCR_DEV_BASE_URL` is set correctly and reachable from this machine.
 - **Server returned HTTP 4xx/5xx**:
   - Inspect the error text shown in the Markdown/JSON tab.
   - Check your backend logs for more details.
-
----
-
-## License
-
-Add your chosen license here (for example, MIT, Apache-2.0, or proprietary).
 
