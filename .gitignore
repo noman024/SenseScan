@@ -1,0 +1,50 @@
+########################
+# Python build artifacts
+########################
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+
+###############
+# Environments
+###############
+venv/
+.venv/
+env/
+.env
+.env.*
+
+#################
+# IDE / editor
+#################
+.vscode/
+.idea/
+*.code-workspace
+
+#########
+# OS
+#########
+.DS_Store
+Thumbs.db
+
+############
+# Gradio
+############
+.gradio/
+
+#####################
+# App-generated data
+#####################
+# All OCR outputs and per-input folders live under data/
+data/
+
+#####################
+# Misc
+#####################
+*.log
+
