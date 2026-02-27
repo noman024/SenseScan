@@ -1,50 +1,26 @@
-########################
-# Python build artifacts
-########################
+# Python / build artifacts
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-*.so
-*.egg-info/
-dist/
-build/
+*.pkl
 
-###############
-# Environments
-###############
+# Virtual environment
 venv/
-.venv/
-env/
-.env
-.env.*
 
-#################
-# IDE / editor
-#################
+# Model weights (large files, not tracked)
+models/
+
+# Editor / IDE
 .vscode/
 .idea/
-*.code-workspace
+*.swp
+*.swo
 
-#########
-# OS
-#########
+# OS files
 .DS_Store
 Thumbs.db
 
-############
-# Gradio
-############
-.gradio/
-
-#####################
-# App-generated data
-#####################
-# All OCR outputs and per-input folders live under data/
+test-data/
+logs/
 data/
-
-#####################
-# Misc
-#####################
-*.log
-

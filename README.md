@@ -1,145 +1,264 @@
-## SenseScan
+## SenseScan – Handwritten Document OCR
 
 - **Author:** MD Mutasim Billah Noman
-- **Updated:** 2/26/2026
+- **Updated:** 2/27/2026
 
-SenseScan is a lightweight web UI for an OCR (Optical Character Recognition) backend service.
-It is built with Gradio and talks to a FastAPI server that exposes an `/ml/ocr` endpoint.
+SenseScan is a focused **handwritten document OCR** service. It exposes a small,
+production-friendly FastAPI app that:
 
-The UI lets you:
+- **Accepts** a full-page handwritten image (currently tuned for Bangla),
+- **Runs** EAST-based text detection + CRNN word recognition (quantization-aware),
+- **Returns** either:
+  - plain-text OCR output via the `/plugin` endpoint, or
+  - a structured JSON response with layout and simple timing info.
 
-- Upload an **image** or **PDF**
-- Send it to the remote OCR service
-- View the recognized content as **Markdown**, a **visualized layout image**, and raw **JSON**
-- Automatically save the input and outputs next to the original file on disk
-
----
-
-## Project structure
-
-- `dev_ocr_ui.py`: Gradio-based UI for interacting with the OCR backend.
-- `requirements.txt`: Python dependencies needed to run the UI.
-
-You are expected to run a separate OCR FastAPI server that implements the `/ml/ocr` endpoint.
+The core application lives entirely in the `sensescan` package.
 
 ---
 
-## Prerequisites
+## 1. Requirements
 
-- **Python**: 3.10+ recommended
-- **pip**: latest version
-
----
-
-## Installation
-
-1. **Clone the repository**
-  ```bash
-   git clone https://github.com/noman024/SenseScan.git
-   cd SenseScan
-  ```
-2. **Create and activate a virtual environment** (recommended)
-  ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-  ```
-3. **Install dependencies**
-  ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
-  ```
+- **Python**: 3.10 (recommended; matches current virtualenv)
+- **Hardware**:
+  - CPU-only works, but **CUDA GPU(s)** are strongly recommended.
+  - If multiple GPUs are available, the models automatically use `DataParallel`.
+- **Disk space**:
+  - Several GB for PyTorch + CUDA wheels.
+  - Additional space for model checkpoints (not included in this repository).
 
 ---
 
-## Configuration
+## 2. Project layout
 
-The UI needs to know where your **OCR FastAPI dev server** is running.
+Key files and directories:
 
-- **Environment variable**: `OCR_DEV_BASE_URL`
-- **Default**: `http://your-deployed-ip:port`
+- `sensescan/`
+  - `__init__.py` – package marker.
+  - `config.py` – device / GPU and model-path configuration.
+  - `detection.py` – EAST-based word segmentation (PyTorch + OpenCV + LANMS).
+  - `recognition.py` – CRNN-based handwritten word recognizer (QAT-compatible).
+  - `pipeline.py` – high-level handwritten OCR pipeline and text reconstruction.
+  - `api.py` – FastAPI application exposing health, plain-text, and JSON endpoints.
+- `requirements.txt`
+  - Runtime dependencies for FastAPI + PyTorch + supporting libraries.
+- `models/`
+  - **Ignored by git** (see `.gitignore`).
+  - You must place your EAST and CRNN checkpoints here (see below).
 
-Examples:
+---
+
+## 3. Setup
+
+From the project root (e.g. `/home/noman/SenseScan`):
 
 ```bash
-export OCR_DEV_BASE_URL="http://your-deployed-ip:port"
-python dev_ocr_ui.py
+python -m venv venv
+source venv/bin/activate
+
+pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-Or in a single command:
+If you already have a suitable CUDA-enabled PyTorch installed in the virtualenv,
+you may comment out the `torch`/`torchvision`/`torchaudio` lines in
+`requirements.txt` and manage them separately to save disk space.
+
+---
+
+## 4. Model files
+
+SenseScan expects **two** trained PyTorch checkpoints (not included in this repo).
+The canonical SenseScan filenames are:
+
+- **EAST handwritten segmentation model**: `SENSESCAN_HW_EAST_MODEL.pth`
+- **Handwritten CRNN word model**: `SENSESCAN_HW_WORD_MODEL.pth`
+
+### 4.1. Default locations
+
+By default, the app will look for:
+
+```text
+<project-root>/models/HW/SENSESCAN_HW_EAST_MODEL.pth
+<project-root>/models/HW/SENSESCAN_HW_WORD_MODEL.pth
+```
+
+These paths are the current SenseScan defaults.
+
+### 4.2. Recommended SenseScan-specific environment variables
+
+You can override the default model paths using **SenseScan**-prefixed environment
+variables:
 
 ```bash
-OCR_DEV_BASE_URL="http://your-deployed-ip:port" python dev_ocr_ui.py
+export SENSESCAN_HW_EAST_MODEL_PATH=/absolute/path/to/SENSESCAN_HW_EAST_MODEL.pth
+export SENSESCAN_HW_WORD_MODEL_PATH=/absolute/path/to/SENSESCAN_HW_WORD_MODEL.pth
 ```
-
-The UI will call:
-
-- `GET/POST`: `${OCR_DEV_BASE_URL}/ml/ocr`
-
-and expects a **ZIP file** response containing:
-
-- A Markdown file (`*.md`)
-- A JSON file (`*.json`)
-- An optional visualization image (`*.png` / `*.jpg`)
 
 ---
 
-## Running the UI
+## 5. Running the server
 
-With your OCR backend running and dependencies installed:
+From the project root:
 
 ```bash
-python dev_ocr_ui.py
+source venv/bin/activate
+
+# Optional: restrict which GPUs to use
+# export CUDA_VISIBLE_DEVICES=0,1
+
+uvicorn sensescan.api:app --host 0.0.0.0 --port 8001
 ```
 
-By default, the app:
+On startup, you should see log lines similar to:
 
-- Listens on `0.0.0.0:7860`
-- Enables a Gradio queue for concurrent requests
-- May expose a public `share` URL (via Gradio) for quick testing
-
-Once started, open the printed URL in your browser.
-
----
-
-## Using the app
-
-1. Open the UI in your browser.
-2. **Upload an image** (preferred) or a **PDF**.
-3. Click **“Run OCR”**.
-4. Inspect the results in the tabs:
-  - **Markdown**: recognized text content, with inline images rendered.
-  - **Visualized Image**: layout visualization returned by the backend.
-  - **JSON**: raw structured output from the OCR service.
-
-For each input, the app saves everything under a `**data/`** directory:
-
-- Creates `data/<name>/` (e.g. `data/mydoc/`)
-- Saves there:
-  - a copy of the input
-  - `<name>.md`
-  - `<name>.json`
-  - `<name>_image.png` (if available)
-  - any inline images extracted from base64 data URIs
+```text
+SenseScan using device: cuda:0 with DataParallel over 2 GPUs
+SenseScan EAST model path: /home/noman/SenseScan/models/HW/SENSESCAN_HW_EAST_MODEL.pth
+SenseScan handwritten word model path: /home/noman/SenseScan/models/HW/SENSESCAN_HW_WORD_MODEL.pth
+```
 
 ---
 
-## Development notes
+## 6. API overview
 
-- The UI is defined in `build_ui()` inside `dev_ocr_ui.py`.
-- The OCR call logic lives in `call_ocr_endpoint()` and expects a ZIP response structure as described above.
-- Image artifacts created from inline base64 data URIs are stored as `inline_*.png`/`.jpg`/`.gif` in `data/<input_name>/`.
+SenseScan exposes a minimal, opinionated API surface:
 
-If you change the backend contract (e.g., different endpoint or response format), update `call_ocr_endpoint()` accordingly.
+- **Health**
+  - `GET /health`
+- **Plain-text OCR**
+  - `POST /plugin`
+- **Structured JSON OCR (recommended for new integrations)**
+  - `POST /v1/ocr/handwritten`
+
+All OCR endpoints are designed specifically for **single-page handwritten document
+images** (currently tuned for Bangla script).
 
 ---
 
-## Troubleshooting
+## 7. Plain-text endpoint (`/plugin`)
 
-- **No file uploaded**: Ensure you upload either an image or a PDF before clicking **Run OCR**.
-- **Connection/timeout errors**:
-  - Check that your OCR FastAPI server is running.
-  - Verify `OCR_DEV_BASE_URL` is set correctly and reachable from this machine.
-- **Server returned HTTP 4xx/5xx**:
-  - Inspect the error text shown in the Markdown/JSON tab.
-  - Check your backend logs for more details.
+### 7.1. Request
+
+- **Method**: `POST`
+- **Path**: `/plugin`
+- **Content type**: `multipart/form-data`
+- **Fields**:
+  - `image`: uploaded image file (handwritten page)
+
+### 7.2. Example with `curl`
+
+```bash
+curl -X POST \
+  -F "image=@test-data/hwrw_1902_1285_5.jpg" \
+  http://localhost:8001/plugin
+```
+
+### 7.3. Response
+
+- **HTTP 200** on success.
+- **Body**: plain-text OCR output (multiple lines), for example:
+
+```text
+ম ম
+...
+নূর মোহাম্মদ নূর
+```
+
+- No JSON wrapper is used; the body is **just the recognized text** in reading order.
+
+---
+
+## 8. JSON OCR endpoint (`/v1/ocr/handwritten`)
+
+### 8.1. Request
+
+- **Method**: `POST`
+- **Path**: `/v1/ocr/handwritten`
+- **Content type**: `multipart/form-data`
+- **Fields**:
+  - `image`: uploaded image file (handwritten page)
+- **Query parameters**:
+  - `include_segments` (bool, default `false`):
+    - If `true`, include per-segment text and geometry.
+  - `include_timings` (bool, default `false`):
+    - If `true`, include a simple timing breakdown.
+
+### 8.2. Example with `curl`
+
+```bash
+curl -X POST \
+  -F "image=@test-data/hwrw_1902_1285_5.jpg" \
+  "http://localhost:8001/v1/ocr/handwritten?include_segments=true&include_timings=true"
+```
+
+### 8.3. Response schema
+
+```json
+{
+  "text": "full page text in reading order",
+  "segments": [
+    {
+      "id": "uuid-1",
+      "text": "word-or-token",
+      "points": [
+        { "x": 10.0, "y": 20.0 },
+        { "x": 10.0, "y": 40.0 },
+        { "x": 80.0, "y": 20.0 },
+        { "x": 80.0, "y": 40.0 }
+      ]
+    }
+    // ...
+  ],
+  "timings": {
+    "total_segment_time": 0.1234,
+    "word_rec_time": 0.4567,
+    "pipeline_time": 0.7890
+  }
+}
+```
+
+- **`text`**:
+  - Single string with `\n`-separated lines in reading order.
+- **`segments`** (optional, only when `include_segments=true`):
+  - One entry per detected word/segment.
+  - `points` is a quadrilateral in **image coordinates**.
+- **`timings`** (optional, only when `include_timings=true`):
+  - Simple, high-level timing breakdown in seconds.
+
+This JSON endpoint is the recommended way to integrate SenseScan into larger
+systems (document viewers, labeling tools, indexing pipelines, etc.) where both
+text and geometry are important.
+
+---
+
+## 9. Design notes: input and output shape
+
+- **Input assumptions**:
+  - One **full page** per request.
+  - Dominantly handwritten Bangla; other scripts may work but are not tuned.
+  - Reasonable resolution (EAST resizes while preserving aspect ratio).
+- **Output philosophy**:
+  - **`/plugin`** keeps the interface extremely simple for shell / CLI use:
+    - Just text, nothing else.
+  - **`/v1/ocr/handwritten`** is structured and explicit:
+    - Separates **page text**, **segments**, and **timings**.
+    - Uses UUIDs and explicit `(x, y)` points so clients can:
+      - Render overlays,
+      - Re-group into lines/paragraphs,
+      - Associate text with downstream metadata.
+- **Extensibility**:
+  - Additional fields such as confidence scores, reading-order indices, or
+    multi-page document IDs can be added as new optional fields in the JSON
+    response without breaking existing clients.
+
+---
+
+## 10. Notes
+
+- The CRNN word model is **quantization-aware trained (QAT)**; the architecture in
+  `sensescan/recognition.py` is built to load such checkpoints correctly.
+- Both the EAST detector and CRNN recognizer automatically use
+  `torch.nn.DataParallel` when **more than one CUDA GPU** is visible.
+- Occasional PyTorch quantization warnings (for example, around `_aminmax`
+  deprecations) are expected and do not affect inference.
 
