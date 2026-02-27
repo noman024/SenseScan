@@ -61,8 +61,8 @@ def _save_artifacts(
 
 
 def _run_sensescan(
-    image: np.ndarray, image_name: str | None
-) -> Tuple[str, Dict[str, object], Dict[str, float], str]:
+    image: np.ndarray,
+) -> Tuple[str, Dict[str, float], str]:
     """
     Core Gradio callback.
 
@@ -70,9 +70,9 @@ def _run_sensescan(
     - image_name: original filename (if available).
     """
     if image is None:
-        return "", {}, {}, "No image uploaded."
+        return "", {}, "No image uploaded."
 
-    request_dir = _create_request_dir(image_name)
+    request_dir = _create_request_dir(None)
 
     # Encode back to bytes so we can persist the original upload.
     # Use PNG for lossless storage if original bytes are not directly available.
@@ -84,9 +84,7 @@ def _run_sensescan(
     # Convert to BGR for pipeline
     bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-    logger.info(
-        f"SenseScan Gradio: file={image_name}, shape={bgr.shape}, dir={request_dir}"
-    )
+    logger.info(f"SenseScan Gradio: shape={bgr.shape}, dir={request_dir}")
 
     segments, timings = run_handwritten_pipeline(bgr)
     text = segments_to_text(segments)
@@ -96,7 +94,7 @@ def _run_sensescan(
     timings_str = json.dumps(timings, indent=2)
     info = f"Saved artifacts under:\n{request_dir}"
 
-    return text, segments, timings, info
+    return text, timings, info
 
 
 def build_interface() -> gr.Blocks:
@@ -114,10 +112,6 @@ def build_interface() -> gr.Blocks:
                     type="numpy",
                     image_mode="RGB",
                 )
-                file_name = gr.Textbox(
-                    label="Filename (optional, for logging only)",
-                    placeholder="hw.jpg",
-                )
                 run_button = gr.Button("Run SenseScan OCR", variant="primary")
 
             with gr.Column(scale=1):
@@ -127,8 +121,6 @@ def build_interface() -> gr.Blocks:
                         lines=12,
                         show_copy_button=True,
                     )
-                with gr.Tab("Segments (JSON)"):
-                    segments_output = gr.JSON(label="Segments dictionary")
                 with gr.Tab("Timings"):
                     timings_output = gr.JSON(label="Timing breakdown (seconds)")
                 with gr.Tab("Run info"):
@@ -136,9 +128,9 @@ def build_interface() -> gr.Blocks:
 
         run_button.click(
             fn=_run_sensescan,
-            inputs=[image_input, file_name],
-            outputs=[text_output, segments_output, timings_output, info_output],
-            concurrency_limit=None,
+            inputs=[image_input],
+            outputs=[text_output, timings_output, info_output],
+            concurrency_limit=4,
             queue=True,
         )
 
@@ -153,11 +145,12 @@ def main() -> None:
     share = os.environ.get("SENSESCAN_GRADIO_SHARE", "false").lower() == "true"
     port = int(os.environ.get("SENSESCAN_GRADIO_PORT", "8002"))
 
-    demo.queue(concurrency_count=4).launch(
+    demo.queue().launch(
         server_name="0.0.0.0",
         server_port=port,
         share=share,
         show_error=True,
+        max_threads=4,
     )
 
 
