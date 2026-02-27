@@ -73,6 +73,9 @@ def run_handwritten_pipeline(
         idx = int(word["id"]) - 1
         if idx < 0 or idx >= len(point_list):
             continue
+        text = (word.get("text") or "").strip()
+        if not text:
+            continue
         point = point_list[idx]
         unique_id = str(uuid.uuid1())
         sentence_dict = {
@@ -81,7 +84,7 @@ def run_handwritten_pipeline(
             "points": point,
             "orientation": None,
             "isRelative": False,
-            "text": {"0": word["text"]},
+            "text": {"0": text},
             "readingOrder": [],
             "relative": False,
             "textstyle": None,

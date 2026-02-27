@@ -39,6 +39,7 @@ Key files and directories:
   - `recognition.py` – CRNN-based handwritten word recognizer (QAT-compatible).
   - `pipeline.py` – high-level handwritten OCR pipeline and text reconstruction.
   - `api.py` – FastAPI application exposing health, plain-text, and JSON endpoints.
+  - `gradio_app.py` – optional Gradio UI for interactive OCR (run with `python -m sensescan.gradio_app`).
 - `requirements.txt`
   - Runtime dependencies for FastAPI + PyTorch + supporting libraries.
 - `models/`
@@ -108,6 +109,9 @@ source venv/bin/activate
 
 uvicorn sensescan.api:app --host 0.0.0.0 --port 8001
 ```
+
+For an interactive Gradio UI (e.g. on port 8002), run:
+`python -m sensescan.gradio_app`.
 
 On startup, you should see log lines similar to:
 

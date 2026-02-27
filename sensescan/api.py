@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
@@ -137,8 +138,6 @@ async def handwritten_plugin(image: UploadFile = File(...)) -> str:
 
     try:
         (request_dir / "ocr.txt").write_text(text, encoding="utf-8")
-        import json
-
         with (request_dir / "ocr.json").open("w", encoding="utf-8") as f:
             json.dump(
                 {"text": text, "segments": segments, "timings": timings},
@@ -227,8 +226,6 @@ async def handwritten_ocr_v1(
 
     try:
         (request_dir / "ocr.txt").write_text(full_text, encoding="utf-8")
-        import json
-
         with (request_dir / "ocr.json").open("w", encoding="utf-8") as f:
             json.dump(
                 response.model_dump(),

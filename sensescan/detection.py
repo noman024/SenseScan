@@ -38,8 +38,8 @@ def _smart_resize_dims(
     height: int,
     width: int,
     factor: int = 32,
-    min_pixels: int = 640_000,
-    max_pixels: int = 2_822_400,
+    min_pixels: int | None = None,
+    max_pixels: int | None = None,
 ) -> Tuple[int, int]:
     """
     Compute target (height, width) so that:
@@ -48,6 +48,10 @@ def _smart_resize_dims(
     2. Total pixels are within [min_pixels, max_pixels].
     3. Aspect ratio is preserved as much as possible.
     """
+    if min_pixels is None:
+        min_pixels = SMART_RESIZE_MIN_PIXELS
+    if max_pixels is None:
+        max_pixels = SMART_RESIZE_MAX_PIXELS
     if height <= 0 or width <= 0:
         raise ValueError(f"Invalid image size: height={height}, width={width}")
 
@@ -76,7 +80,7 @@ def _smart_resize_dims(
     return int(h_bar), int(w_bar)
 
 
-def resize_img(img: np.ndarray, max_length: int = 1600) -> Tuple[np.ndarray, float, float]:
+def resize_img(img: np.ndarray) -> Tuple[np.ndarray, float, float]:
     """
     Resize image using a smart, DPI-friendly strategy:
 
@@ -86,11 +90,7 @@ def resize_img(img: np.ndarray, max_length: int = 1600) -> Tuple[np.ndarray, flo
     - Uses Lanczos when upscaling (sharper result), INTER_AREA when downscaling.
     """
     h, w, _ = img.shape
-    resize_h, resize_w = _smart_resize_dims(
-        h, w, factor=32,
-        min_pixels=SMART_RESIZE_MIN_PIXELS,
-        max_pixels=SMART_RESIZE_MAX_PIXELS,
-    )
+    resize_h, resize_w = _smart_resize_dims(h, w, factor=32)
 
     # Sharper upscaling for low-res inputs; area-based downscaling for large images.
     is_upscale = (resize_w * resize_h) > (w * h)
@@ -147,8 +147,8 @@ def _restore_polys(
 
         temp_x = np.array([[x_min, x_max, x_max, x_min]]) - x
         temp_y = np.array([[y_min, y_min, y_max, y_max]]) - y
-        coordidates = np.concatenate((temp_x, temp_y), axis=0)
-        res = np.dot(rotate_mat, coordidates)
+        coordinates = np.concatenate((temp_x, temp_y), axis=0)
+        res = np.dot(rotate_mat, coordinates)
         res[0, :] += x
         res[1, :] += y
 

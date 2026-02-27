@@ -8,10 +8,11 @@ This package exposes:
 """
 
 __all__ = [
+    "api",
     "config",
     "detection",
-    "recognition",
+    "gradio_app",
     "pipeline",
-    "api",
+    "recognition",
 ]
 
