@@ -37,15 +37,14 @@ def _create_request_dir(original_filename: str | None) -> Path:
 def _save_artifacts(
     request_dir: Path,
     original_bytes: bytes,
-    original_filename: str | None,
     text: str,
     segments: Dict[str, object],
     timings: Dict[str, float],
 ) -> None:
     """Persist input image and OCR outputs into the per-request directory."""
     try:
-        suffix = Path(original_filename or "input").suffix or ".bin"
-        (request_dir / f"input{suffix}").write_bytes(original_bytes)
+        # Store the input as PNG, since we already encoded it that way
+        (request_dir / "input.png").write_bytes(original_bytes)
 
         (request_dir / "ocr.txt").write_text(text, encoding="utf-8")
 
@@ -62,7 +61,7 @@ def _save_artifacts(
 
 def _run_sensescan(
     image: np.ndarray,
-) -> Tuple[str, Dict[str, float], str]:
+) -> Tuple[str, Dict[str, float]]:
     """
     Core Gradio callback.
 
@@ -70,7 +69,7 @@ def _run_sensescan(
     - image_name: original filename (if available).
     """
     if image is None:
-        return "", {}, "No image uploaded."
+        return "", {}
 
     request_dir = _create_request_dir(None)
 
@@ -89,12 +88,9 @@ def _run_sensescan(
     segments, timings = run_handwritten_pipeline(bgr)
     text = segments_to_text(segments)
 
-    _save_artifacts(request_dir, original_bytes, image_name, text, segments, timings)
+    _save_artifacts(request_dir, original_bytes, text, segments, timings)
 
-    timings_str = json.dumps(timings, indent=2)
-    info = f"Saved artifacts under:\n{request_dir}"
-
-    return text, timings, info
+    return text, timings
 
 
 def build_interface() -> gr.Blocks:
@@ -123,13 +119,11 @@ def build_interface() -> gr.Blocks:
                     )
                 with gr.Tab("Timings"):
                     timings_output = gr.JSON(label="Timing breakdown (seconds)")
-                with gr.Tab("Run info"):
-                    info_output = gr.Markdown(label="Run information")
 
         run_button.click(
             fn=_run_sensescan,
             inputs=[image_input],
-            outputs=[text_output, timings_output, info_output],
+            outputs=[text_output, timings_output],
             concurrency_limit=4,
             queue=True,
         )
