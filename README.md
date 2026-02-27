@@ -1,9 +1,9 @@
-## SenseScan – Handwritten Document OCR
+## SenseScan – Bangla Handwritten Document OCR
 
 - **Author:** MD Mutasim Billah Noman
 - **Updated:** 2/27/2026
 
-SenseScan is a focused **handwritten document OCR** service. It exposes a small,
+SenseScan is a focused **Bangla handwritten document OCR** service. It exposes a small,
 production-friendly FastAPI app that:
 
 - **Accepts** a full-page handwritten image (currently tuned for Bangla),
@@ -130,8 +130,8 @@ SenseScan exposes a minimal, opinionated API surface:
 - **Structured JSON OCR (recommended for new integrations)**
   - `POST /v1/ocr/handwritten`
 
-All OCR endpoints are designed specifically for **single-page handwritten document
-images** (currently tuned for Bangla script).
+All OCR endpoints are designed specifically for **single-page Bangla handwritten document
+images**. Other languages/scripts are not supported.
 
 ---
 

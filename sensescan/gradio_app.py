@@ -94,17 +94,18 @@ def _run_sensescan(
 
 
 def build_interface() -> gr.Blocks:
-    with gr.Blocks(title="SenseScan – Handwritten OCR") as demo:
+    with gr.Blocks(title="SenseScan – Bangla Handwritten OCR") as demo:
         gr.Markdown(
-            "## SenseScan – Handwritten Document OCR\n"
-            "Upload a handwritten page on the left, then run SenseScan to view "
-            "plain-text OCR, structured segments, and timing information on the right."
+            "## SenseScan – Bangla Handwritten Document OCR\n"
+            "Upload a Bangla handwritten page on the left, then run SenseScan to view "
+            "plain-text OCR and timing information on the right.\n\n"
+            "**Note:** This service currently supports only Bangla handwritten text."
         )
 
         with gr.Row():
             with gr.Column(scale=1):
                 image_input = gr.Image(
-                    label="Handwritten page",
+                    label="Bangla handwritten page",
                     type="numpy",
                     image_mode="RGB",
                 )

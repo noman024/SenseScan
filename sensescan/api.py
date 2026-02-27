@@ -23,11 +23,11 @@ from .pipeline import run_handwritten_pipeline, segments_to_text
 setup_logging()
 
 app = FastAPI(
-    title="SenseScan – Handwritten Document OCR API",
+    title="SenseScan – Bangla Handwritten OCR API",
     description=(
-        "SenseScan is a focused handwritten document OCR service for full-page handwritten images. "
+        "SenseScan is a focused Bangla handwritten document OCR service for full-page handwritten images. "
         "It provides a simple plain-text endpoint and a richer JSON API for applications "
-        "that need layout and timing information."
+        "that need layout and timing information. Other languages/scripts are not supported in this service."
     ),
 )
 
@@ -107,7 +107,7 @@ def _load_image_from_upload(image: UploadFile, save_dir: Path) -> cv2.Mat:
 @app.get("/health", summary="Health check")
 async def health() -> Dict[str, str]:
     """Lightweight health check endpoint."""
-    return {"status": "ok", "service": "sensescan-handwritten-ocr"}
+    return {"status": "ok", "service": "sensescan-bangla-handwritten-ocr"}
 
 
 @app.post("/plugin", response_class=PlainTextResponse)
@@ -171,7 +171,7 @@ async def handwritten_ocr_v1(
     ),
 ) -> HandwrittenOCRResponse:
     """
-    Primary SenseScan JSON API for handwritten document OCR.
+    Primary SenseScan JSON API for Bangla handwritten document OCR.
 
     **Request**
     - Content type: ``multipart/form-data``
