@@ -522,7 +522,7 @@ class HandwrittenWordRecognizer:
                 img = img.transpose(2, 0, 1)
                 imgs[idx] = img
             except Exception as e:  # pragma: no cover - logging only
-                logger.exception(e)
+                logger.warning("recognition preprocess crop failed | idx={} coords={} error={}", idx, data, e)
 
         return imgs
 
@@ -530,7 +530,15 @@ class HandwrittenWordRecognizer:
         self, image: np.ndarray, word_coords: List[List[int]]
     ) -> List[Dict[str, object]]:
         result: List[Dict[str, object]] = []
+        h, w = image.shape[:2]
+        logger.info(
+            "recognition infer start | image_shape=({}, {}), rois={}",
+            h, w, len(word_coords),
+        )
+
         processed_imgs = self._preprocess_twr_hwr(image, word_coords)
+        n_crops = len(processed_imgs)
+        logger.info("recognition preprocess done | crops={}", n_crops)
 
         processed_imgs_t = torch.tensor(processed_imgs, dtype=torch.float32).to(
             self.device
@@ -540,6 +548,8 @@ class HandwrittenWordRecognizer:
             start_idx = 0
             batch_size = 128
             total = len(processed_imgs_t)
+            n_batches = (total + batch_size - 1) // batch_size
+            logger.debug("recognition inference | batches={}, batch_size={}", n_batches, batch_size)
             while start_idx < total:
                 end_idx = min(start_idx + batch_size, total)
                 preds = self.model(processed_imgs_t[start_idx:end_idx, ...])
@@ -555,5 +565,6 @@ class HandwrittenWordRecognizer:
 
                 start_idx += batch_size
 
+        logger.info("recognition infer done | words={}", len(result))
         return result
 

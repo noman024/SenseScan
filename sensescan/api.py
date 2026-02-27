@@ -87,20 +87,22 @@ def _load_image_from_upload(image: UploadFile, save_dir: Path) -> cv2.Mat:
     """Load an uploaded image, persist the original file, and decode into BGR."""
     data = image.file.read()
     if not data:
+        logger.error("api load_image | empty upload")
         raise HTTPException(status_code=400, detail="Empty image upload")
 
-    # Persist original upload
     original_name = image.filename or "input"
     suffix = Path(original_name).suffix or ".bin"
     input_path = save_dir / f"input{suffix}"
     input_path.write_bytes(data)
+    logger.info("api load_image | saved input path={}", input_path)
 
-    # Decode into OpenCV image
     np_arr = np.frombuffer(data, dtype=np.uint8)
     img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     if img is None:
+        logger.error("api load_image | decode failed path={}", input_path)
         raise HTTPException(status_code=400, detail="Failed to decode image")
 
+    logger.info("api load_image | decoded shape=({}, {})", img.shape[0], img.shape[1])
     return img
 
 
@@ -121,22 +123,18 @@ async def handwritten_plugin(image: UploadFile = File(...)) -> str:
     """
     start_api_time = time.time()
     timings: Dict[str, float] = {}
+    logger.info("api /plugin request | filename={}", image.filename)
 
     request_dir = _create_request_dir(image.filename)
     img = _load_image_from_upload(image, request_dir)
-    logger.info(
-        f"SenseScan /plugin: file={image.filename}, shape={img.shape}, dir={request_dir}"
-    )
 
-    segments, ocr_timings = run_handwritten_pipeline(img)
+    segments, ocr_timings = run_handwritten_pipeline(img, request_dir=request_dir)
     timings.update(ocr_timings)
+    logger.info("api /plugin pipeline done | segments={}", len(segments))
 
     text = segments_to_text(segments)
-
     timings["pipeline_time"] = round(time.time() - start_api_time, 4)
-    logger.info(f"SenseScan /plugin timings: {timings}")
 
-    # Persist outputs
     try:
         (request_dir / "ocr.txt").write_text(text, encoding="utf-8")
         import json
@@ -148,8 +146,9 @@ async def handwritten_plugin(image: UploadFile = File(...)) -> str:
                 ensure_ascii=False,
                 indent=2,
             )
+        logger.info("api /plugin outputs saved | dir={} timings={}", request_dir, timings)
     except Exception as e:  # pragma: no cover - logging only
-        logger.exception(f"Failed to persist outputs for /plugin request: {e}")
+        logger.exception("api /plugin save failed | error={}", e)
 
     return text
 
@@ -188,15 +187,14 @@ async def handwritten_ocr_v1(
     """
     start_api_time = time.time()
     timings: Dict[str, float] = {}
+    logger.info("api /v1/ocr/handwritten request | filename={}", image.filename)
 
     request_dir = _create_request_dir(image.filename)
     img = _load_image_from_upload(image, request_dir)
-    logger.info(
-        f"SenseScan /v1/ocr/handwritten: file={image.filename}, shape={img.shape}, dir={request_dir}"
-    )
 
-    segments_dict, ocr_timings = run_handwritten_pipeline(img)
+    segments_dict, ocr_timings = run_handwritten_pipeline(img, request_dir=request_dir)
     timings.update(ocr_timings)
+    logger.info("api /v1/ocr/handwritten pipeline done | segments={}", len(segments_dict))
 
     full_text = segments_to_text(segments_dict)
 
@@ -219,7 +217,7 @@ async def handwritten_ocr_v1(
             word_rec_time=timings.get("word_rec_time"),
             pipeline_time=timings.get("pipeline_time"),
         )
-        logger.info(f"SenseScan /v1/ocr/handwritten timings: {timings}")
+        logger.info("api /v1/ocr/handwritten timings | {}", timings)
 
     response = HandwrittenOCRResponse(
         text=full_text,
@@ -227,7 +225,6 @@ async def handwritten_ocr_v1(
         timings=timings_out,
     )
 
-    # Persist outputs
     try:
         (request_dir / "ocr.txt").write_text(full_text, encoding="utf-8")
         import json
@@ -239,8 +236,9 @@ async def handwritten_ocr_v1(
                 ensure_ascii=False,
                 indent=2,
             )
+        logger.info("api /v1/ocr/handwritten outputs saved | dir={}", request_dir)
     except Exception as e:  # pragma: no cover - logging only
-        logger.exception(f"Failed to persist outputs for /v1/ocr/handwritten request: {e}")
+        logger.exception("api /v1/ocr/handwritten save failed | error={}", e)
 
     return response
 

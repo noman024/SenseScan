@@ -43,7 +43,6 @@ def _save_artifacts(
 ) -> None:
     """Persist input image and OCR outputs into the per-request directory."""
     try:
-        # Store the input as PNG, since we already encoded it that way
         (request_dir / "input.png").write_bytes(original_bytes)
 
         (request_dir / "ocr.txt").write_text(text, encoding="utf-8")
@@ -56,7 +55,7 @@ def _save_artifacts(
                 indent=2,
             )
     except Exception as e:  # pragma: no cover - logging only
-        logger.exception(f"Failed to persist artifacts for Gradio request: {e}")
+        logger.exception("gradio save_artifacts failed | error={}", e)
 
 
 def _run_sensescan(
@@ -72,23 +71,23 @@ def _run_sensescan(
         return "", {}
 
     request_dir = _create_request_dir(None)
+    logger.info("gradio request | dir={}", request_dir)
 
-    # Encode back to bytes so we can persist the original upload.
-    # Use PNG for lossless storage if original bytes are not directly available.
     success, buffer = cv2.imencode(".png", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
     if not success:
-        return "", {}, {}, "Failed to encode image."
+        logger.error("gradio encode failed")
+        return "", {}
     original_bytes = buffer.tobytes()
 
-    # Convert to BGR for pipeline
     bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    logger.info("gradio load_image | shape=({}, {})", bgr.shape[0], bgr.shape[1])
 
-    logger.info(f"SenseScan Gradio: shape={bgr.shape}, dir={request_dir}")
+    segments, timings = run_handwritten_pipeline(bgr, request_dir=request_dir)
+    logger.info("gradio pipeline done | segments={} timings={}", len(segments), timings)
 
-    segments, timings = run_handwritten_pipeline(bgr)
     text = segments_to_text(segments)
-
     _save_artifacts(request_dir, original_bytes, text, segments, timings)
+    logger.info("gradio outputs saved | dir={}", request_dir)
 
     return text, timings
 

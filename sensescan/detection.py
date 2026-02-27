@@ -1,36 +1,105 @@
 from __future__ import annotations
 
 import math
-from typing import Dict, List, Tuple
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import lanms
 import numpy as np
 import torch
+from loguru import logger
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 
 
+def _round_by_factor(number: int, factor: int) -> int:
+    """Return the closest integer to `number` that is divisible by `factor`."""
+    return int(round(number / factor) * factor)
+
+
+def _ceil_by_factor(number: float, factor: int) -> int:
+    """Return the smallest integer >= `number` that is divisible by `factor`."""
+    return int(math.ceil(number / factor) * factor)
+
+
+def _floor_by_factor(number: float, factor: int) -> int:
+    """Return the largest integer <= `number` that is divisible by `factor`."""
+    return int(math.floor(number / factor) * factor)
+
+
+# Target pixel range for smart resize: higher floor = clearer small images (e.g. ~200 DPI equivalent).
+SMART_RESIZE_MIN_PIXELS: int = 1_000_000   # ~1 MP floor: upscale small docs for clearer text
+SMART_RESIZE_MAX_PIXELS: int = 3_200_000  # cap to control memory/speed while keeping detail
+
+
+def _smart_resize_dims(
+    height: int,
+    width: int,
+    factor: int = 32,
+    min_pixels: int = 640_000,
+    max_pixels: int = 2_822_400,
+) -> Tuple[int, int]:
+    """
+    Compute target (height, width) so that:
+
+    1. Both dimensions are divisible by `factor` (EAST requires multiples of 32).
+    2. Total pixels are within [min_pixels, max_pixels].
+    3. Aspect ratio is preserved as much as possible.
+    """
+    if height <= 0 or width <= 0:
+        raise ValueError(f"Invalid image size: height={height}, width={width}")
+
+    aspect_ratio = max(height, width) / min(height, width)
+    if aspect_ratio > 200:
+        raise ValueError(
+            f"Absolute aspect ratio must be smaller than 200, got {aspect_ratio}"
+        )
+
+    h_bar = max(factor, _round_by_factor(height, factor))
+    w_bar = max(factor, _round_by_factor(width, factor))
+
+    if h_bar * w_bar > max_pixels:
+        beta = math.sqrt((height * width) / max_pixels)
+        h_bar = max(factor, _floor_by_factor(height / beta, factor))
+        w_bar = max(factor, _floor_by_factor(width / beta, factor))
+    elif h_bar * w_bar < min_pixels:
+        beta = math.sqrt(min_pixels / (height * width))
+        h_bar = _ceil_by_factor(height * beta, factor)
+        w_bar = _ceil_by_factor(width * beta, factor)
+        if h_bar * w_bar > max_pixels:
+            beta = math.sqrt((h_bar * w_bar) / max_pixels)
+            h_bar = max(factor, _floor_by_factor(h_bar / beta, factor))
+            w_bar = max(factor, _floor_by_factor(w_bar / beta, factor))
+
+    return int(h_bar), int(w_bar)
+
+
 def resize_img(img: np.ndarray, max_length: int = 1600) -> Tuple[np.ndarray, float, float]:
-    """Resize image so that both sides are divisible by 32 and longest side <= max_length."""
+    """
+    Resize image using a smart, DPI-friendly strategy:
+
+    - Output height/width are divisible by 32 for EAST.
+    - Total pixels are kept within [SMART_RESIZE_MIN_PIXELS, SMART_RESIZE_MAX_PIXELS],
+      upscaling small images for clearer text and downscaling very large ones.
+    - Uses Lanczos when upscaling (sharper result), INTER_AREA when downscaling.
+    """
     h, w, _ = img.shape
-    resize_w = w
-    resize_h = h
-    if h >= w and h > max_length:
-        resize_w = int(w * max_length / h)
-        resize_h = max_length
-    elif w > h and w > max_length:
-        resize_w = max_length
-        resize_h = int(h * max_length / w)
+    resize_h, resize_w = _smart_resize_dims(
+        h, w, factor=32,
+        min_pixels=SMART_RESIZE_MIN_PIXELS,
+        max_pixels=SMART_RESIZE_MAX_PIXELS,
+    )
 
-    resize_h = resize_h if resize_h % 32 == 0 else (resize_h // 32) * 32
-    resize_w = resize_w if resize_w % 32 == 0 else (resize_w // 32) * 32
+    # Sharper upscaling for low-res inputs; area-based downscaling for large images.
+    is_upscale = (resize_w * resize_h) > (w * h)
+    interp = cv2.INTER_LANCZOS4 if is_upscale else cv2.INTER_AREA
+    img_resized = cv2.resize(img, (resize_w, resize_h), interpolation=interp)
 
-    img = cv2.resize(img, (resize_w, resize_h), interpolation=cv2.INTER_AREA)
     ratio_h = resize_h / h
     ratio_w = resize_w / w
-    return img, ratio_h, ratio_w
+    return img_resized, ratio_h, ratio_w
 
 
 def _get_rotate_mat(theta: float) -> np.ndarray:
@@ -315,10 +384,28 @@ class EASTSegmentation:
         self.model = base_model.eval()
 
     def detect_words(
-        self, img_bgr: np.ndarray
+        self,
+        img_bgr: np.ndarray,
+        save_preprocessed_path: Optional[Path] = None,
     ) -> Tuple[List[List[Dict[str, float]]], List[List[int]]]:
+        h_in, w_in = img_bgr.shape[:2]
+        logger.debug("detection start | input_shape=({}, {})", h_in, w_in)
+
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         img_resized, ratio_h, ratio_w = resize_img(img_rgb)
+        h_rsz, w_rsz = img_resized.shape[:2]
+        logger.info(
+            "detection resize | input=({}, {}), resized=({}, {}), ratio_h={:.4f}, ratio_w={:.4f}",
+            h_in, w_in, h_rsz, w_rsz, ratio_h, ratio_w,
+        )
+
+        if save_preprocessed_path is not None:
+            try:
+                bgr_resized = cv2.cvtColor(img_resized, cv2.COLOR_RGB2BGR)
+                cv2.imwrite(str(save_preprocessed_path), bgr_resized)
+                logger.info("detection preprocessed saved | path={}", save_preprocessed_path)
+            except Exception as e:  # pragma: no cover - best-effort save
+                logger.warning("detection preprocessed save failed | path={} error={}", save_preprocessed_path, e)
 
         transform = transforms.Compose(
             [
@@ -335,7 +422,14 @@ class EASTSegmentation:
         geo_np = geo.squeeze(0).cpu().numpy()
 
         boxes = get_boxes(score_np, geo_np)
+        n_boxes_raw = len(boxes) if boxes is not None else 0
+        logger.debug("detection get_boxes | raw_boxes={}", n_boxes_raw)
+
         boxes = adjust_ratio(boxes, ratio_w, ratio_h)
         points, bboxes = get_bounding_rect_coords(boxes)
+        logger.info(
+            "detection done | points={}, rois={}",
+            len(points), len(bboxes),
+        )
         return points, bboxes
 
