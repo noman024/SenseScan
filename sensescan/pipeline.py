@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import cv2
 import numpy as np
 from loguru import logger
 
@@ -31,8 +34,9 @@ def run_handwritten_pipeline(
     - segments_dict: mapping from UUID to text block metadata
     - timings: simple timing breakdown for segmentation and recognition
 
-    If request_dir is provided, the preprocessed (smart-resized) image fed to
-    the detector is saved as request_dir / "preprocessed.png".
+    If request_dir is provided, intermediate outputs are saved:
+    preprocessed.png, detection_boxes.json, detection_boxes.png, crops/*.png,
+    crops/*_model_input.png, and pipeline_log.txt (plus ocr.txt/ocr.json by the API/Gradio).
     """
     h, w = image.shape[:2]
     logger.info(
@@ -52,11 +56,31 @@ def run_handwritten_pipeline(
         len(roi_list), timings["total_segment_time"],
     )
 
+    if request_dir is not None:
+        try:
+            with (request_dir / "detection_boxes.json").open("w", encoding="utf-8") as f:
+                json.dump(
+                    {"points": point_list, "rois": roi_list},
+                    f,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            vis = image.copy()
+            for roi in roi_list:
+                x_min, x_max, y_min, y_max = roi
+                cv2.rectangle(vis, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+            cv2.imwrite(str(request_dir / "detection_boxes.png"), vis)
+            logger.info("pipeline detection outputs saved | dir={}", request_dir)
+        except Exception as e:  # pragma: no cover - logging only
+            logger.warning("pipeline detection save failed | error={}", e)
+
     logger.info("pipeline step=recognition start | rois={}", len(roi_list))
     start_time = time.time()
     recognized_words_list: List[Dict[str, object]] = []
     if len(roi_list) > 0:
-        recognized_words_list = _word_recog.infer(image, roi_list)
+        recognized_words_list = _word_recog.infer(
+            image, roi_list, request_dir=request_dir
+        )
     timings["word_rec_time"] = round(time.time() - start_time, 4)
     logger.info(
         "pipeline step=recognition done | words={}, time_s={}",
@@ -95,6 +119,26 @@ def run_handwritten_pipeline(
         "pipeline done | segments={}, total_segment_time_s={}, word_rec_time_s={}",
         len(textline_dict), timings["total_segment_time"], timings["word_rec_time"],
     )
+
+    if request_dir is not None:
+        try:
+            log_lines = [
+                f"Pipeline run at {datetime.now(timezone.utc).isoformat()}",
+                f"image_shape: {h} x {w}",
+                f"detection_boxes: {len(roi_list)}",
+                f"recognized_words: {len(recognized_words_list)}",
+                f"segments: {len(textline_dict)}",
+                f"total_segment_time_s: {timings.get('total_segment_time', 0)}",
+                f"word_rec_time_s: {timings.get('word_rec_time', 0)}",
+                "status: completed",
+            ]
+            (request_dir / "pipeline_log.txt").write_text(
+                "\n".join(log_lines), encoding="utf-8"
+            )
+            logger.info("pipeline run log saved | dir={}", request_dir)
+        except Exception as e:  # pragma: no cover - logging only
+            logger.warning("pipeline run log save failed | error={}", e)
+
     return textline_dict, timings
 
 

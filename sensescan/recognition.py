@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -494,11 +495,18 @@ class HandwrittenWordRecognizer:
         return decoded_label, "".join(decoded_string)
 
     def _preprocess_twr_hwr(
-        self, main_image: np.ndarray, word_coords: List[List[int]]
+        self,
+        main_image: np.ndarray,
+        word_coords: List[List[int]],
+        request_dir: Optional[Path] = None,
+        save_model_inputs: bool = False,
     ) -> np.ndarray:
         inp_h = 32
         inp_w = 128
         imgs = np.zeros((len(word_coords), 1, inp_h, inp_w), dtype=np.float32)
+        crops_dir = (request_dir / "crops") if request_dir is not None else None
+        if crops_dir is not None:
+            crops_dir.mkdir(parents=True, exist_ok=True)
 
         for idx, data in enumerate(word_coords):
             try:
@@ -508,8 +516,13 @@ class HandwrittenWordRecognizer:
                 if img.size == 0 or img.shape[0] == 0 or img.shape[1] == 0:
                     continue
 
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                if crops_dir is not None:
+                    try:
+                        cv2.imwrite(str(crops_dir / f"{idx:04d}.png"), img)
+                    except Exception as e:  # pragma: no cover - logging only
+                        logger.warning("recognition save crop failed | idx={} error={}", idx, e)
 
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 img_h, img_w = img.shape
                 img = cv2.resize(
                     img,
@@ -518,6 +531,17 @@ class HandwrittenWordRecognizer:
                     fy=inp_h / img_h,
                     interpolation=cv2.INTER_CUBIC,
                 )
+
+                if crops_dir is not None and save_model_inputs:
+                    try:
+                        model_input_uint8 = (np.clip(img, 0, 255)).astype(np.uint8)
+                        cv2.imwrite(
+                            str(crops_dir / f"{idx:04d}_model_input.png"),
+                            model_input_uint8,
+                        )
+                    except Exception as e:  # pragma: no cover - logging only
+                        logger.warning("recognition save model_input failed | idx={} error={}", idx, e)
+
                 img = np.reshape(img, (inp_h, inp_w, 1))
                 img = img.transpose(2, 0, 1)
                 imgs[idx] = img
@@ -527,7 +551,11 @@ class HandwrittenWordRecognizer:
         return imgs
 
     def infer(
-        self, image: np.ndarray, word_coords: List[List[int]]
+        self,
+        image: np.ndarray,
+        word_coords: List[List[int]],
+        request_dir: Optional[Path] = None,
+        save_model_inputs: bool = True,
     ) -> List[Dict[str, object]]:
         result: List[Dict[str, object]] = []
         h, w = image.shape[:2]
@@ -536,7 +564,12 @@ class HandwrittenWordRecognizer:
             h, w, len(word_coords),
         )
 
-        processed_imgs = self._preprocess_twr_hwr(image, word_coords)
+        processed_imgs = self._preprocess_twr_hwr(
+            image,
+            word_coords,
+            request_dir=request_dir,
+            save_model_inputs=save_model_inputs,
+        )
         n_crops = len(processed_imgs)
         logger.info("recognition preprocess done | crops={}", n_crops)
 
