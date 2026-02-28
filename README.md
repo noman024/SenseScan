@@ -110,8 +110,13 @@ source venv/bin/activate
 uvicorn sensescan.api:app --host 0.0.0.0 --port 8001
 ```
 
-For an interactive Gradio UI (e.g. on port 8002), run:
-`python -m sensescan.gradio_app`.
+For an interactive Gradio UI (e.g. on port 8002) with a **public shareable link** (gradio.live):
+
+```bash
+python -m sensescan.gradio_app
+```
+
+By default, Gradio creates a public URL. Set `SENSESCAN_GRADIO_SHARE=false` to disable.
 
 On startup, you should see log lines similar to:
 

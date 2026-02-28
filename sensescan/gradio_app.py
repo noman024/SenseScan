@@ -134,15 +134,12 @@ def build_interface() -> gr.Blocks:
 def main() -> None:
     demo = build_interface()
 
-    # Stable internal URL; for a public, shareable URL, set
-    # SENSESCAN_GRADIO_SHARE=true in the environment.
-    share = os.environ.get("SENSESCAN_GRADIO_SHARE", "false").lower() == "true"
     port = int(os.environ.get("SENSESCAN_GRADIO_PORT", "8002"))
 
     demo.queue().launch(
         server_name="0.0.0.0",
         server_port=port,
-        share=share,
+        share=True,
         show_error=True,
         max_threads=4,
     )
