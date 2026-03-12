@@ -91,8 +91,8 @@ You can override the default model paths using **SenseScan**-prefixed environmen
 variables:
 
 ```bash
-export SENSESCAN_HW_EAST_MODEL_PATH=/absolute/path/to/SENSESCAN_HW_EAST_MODEL.pth
-export SENSESCAN_HW_WORD_MODEL_PATH=/absolute/path/to/SENSESCAN_HW_WORD_MODEL.pth
+export SENSESCAN_HW_EAST_MODEL_PATH=/home/noman/SenseScan/models/HW/SENSESCAN_HW_EAST_MODEL.pth
+export SENSESCAN_HW_WORD_MODEL_PATH=/home/noman/SenseScan/models/HW/SENSESCAN_HW_WORD_MODEL.pth
 ```
 
 ---
