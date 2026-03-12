@@ -118,25 +118,32 @@ def _run_sensescan(
             timings.get("total_segment_time", 0.0) + timings.get("word_rec_time", 0.0)
         )
 
-        status_text = f"Completed detection and recognition in {total_time:.3f}s."
+        status_text = (
+            "Done. Text, visualization, and timings are ready."
+            if num_segments > 0
+            else "Completed, but no handwriting was detected in this image."
+        )
         meta_summary = (
-            f"**Words:** {num_segments} &nbsp;|&nbsp; **Lines:** {num_lines} &nbsp;|&nbsp; "
-            f"**Total time:** {total_time:.3f}s"
+            f"Words: {num_segments} · Lines: {num_lines} · Total time: {total_time:.3f}s"
         )
 
         messages: List[str] = []
         if num_segments == 0:
             messages.append(
-                "No text regions were detected. Check that the page contains Bangla handwriting, "
-                "is reasonably sharp, and that the full page is visible."
+                "**Warning:** We could not find Bangla handwriting in this image. "
+                "Try a sharper, full-page Bangla handwritten photo or use a sample on the left."
             )
         h, w = bgr.shape[:2]
         if min(h, w) < 600:
             messages.append(
-                f"Input resolution is relatively low ({w}×{h}). Higher-resolution scans or photos "
-                "will generally improve OCR quality."
+                f"**Suggestion:** Input resolution is relatively low ({w}×{h}). "
+                "Higher-resolution scans or photos will generally improve OCR quality."
             )
-        messages_text = "<br/>".join(messages) if messages else "No warnings."
+        messages_text = (
+            "<br/>".join(messages)
+            if messages
+            else "Image quality looks okay. No major issues detected."
+        )
 
         return text, overlay_rgb, timings, json_path_str, status_text, meta_summary, messages_text
     except gr.Error:
@@ -153,19 +160,24 @@ def build_interface() -> gr.Blocks:
     # Use default (light) theme for better contrast in demos.
     with gr.Blocks(title="SenseScan – Bangla Handwritten OCR") as demo:
         gr.Markdown(
-            "## SenseScan – Bangla Handwritten Document OCR\n"
-            "A focused demo of SenseScan's Bangla handwritten page OCR.\n\n"
-            "**How to use:** Upload a single full-page Bangla handwritten image on the left, "
-            "then click **Run SenseScan OCR** to view recognized text, visualizations, and timings.\n\n"
-            "**Note:** This service currently supports only Bangla handwritten text."
+            "## SenseScan – Bangla Handwritten OCR\n"
+            "Upload a Bangla handwritten page to see high-accuracy OCR text, "
+            "detection overlay, and timings in a few seconds.\n\n"
+            "**How it works:** 1) Upload a full page on the left · "
+            "2) Click **Run SenseScan OCR** · 3) Explore Text, Visualization, and Timings on the right.\n\n"
+            "**Note:** SenseScan is currently tuned for Bangla handwritten pages only."
         )
 
         with gr.Row():
             with gr.Column(scale=1):
                 image_input = gr.Image(
-                    label="Bangla handwritten page",
+                    label="Upload Bangla handwritten page",
                     type="numpy",
                     image_mode="RGB",
+                )
+                gr.Markdown(
+                    "**Sample pages:** Try one of the preloaded Bangla handwritten pages below "
+                    "to quickly see SenseScan in action."
                 )
                 gr.Examples(
                     examples=[
@@ -175,37 +187,48 @@ def build_interface() -> gr.Blocks:
                         "test-data/hwrw_115_653_1.jpg",
                     ],
                     inputs=image_input,
-                    label="Try with a sample handwritten page",
+                    label="Sample Bangla handwritten pages",
                 )
                 gr.Markdown(
-                    "**Best results:**\n"
-                    "- Use a single full page per image\n"
-                    "- Keep the page reasonably flat and in focus\n"
-                    "- Avoid strong shadows and extreme skew\n"
-                    "- Bangla handwriting only (no printed/English text)"
+                    "**For best results:** Single full page · in focus · minimal shadows · "
+                    "Bangla handwriting only (no printed or English text)."
                 )
                 run_button = gr.Button("Run SenseScan OCR", variant="primary")
-                clear_button = gr.Button("Clear")
+                clear_button = gr.Button("Clear", variant="secondary")
 
             with gr.Column(scale=2):
                 with gr.Tab("Text"):
                     status_output = gr.Markdown(
-                        value="Idle. Upload a page and click **Run SenseScan OCR**.",
+                        value=(
+                            "Idle. Upload a Bangla handwritten page on the left and click "
+                            "**Run SenseScan OCR**."
+                        ),
                         elem_id="status-text",
                     )
                     meta_output = gr.Markdown(value="", elem_id="meta-summary")
                     text_output = gr.Textbox(
                         label="Recognized text",
-                        lines=12,
+                        lines=16,
                         show_copy_button=True,
                         interactive=False,
+                        info=(
+                            "Text is returned in reading order. "
+                            "Use the copy button to paste it into your workflow."
+                        ),
                     )
                 with gr.Tab("Visualization"):
+                    gr.Markdown(
+                        "Overlay of detected word regions on the original page for quick visual inspection."
+                    )
                     overlay_output = gr.Image(
-                        label="Detected word regions (preview)",
+                        label="Detected word regions (overlay)",
                         interactive=False,
                     )
                 with gr.Tab("Timings & JSON"):
+                    gr.Markdown(
+                        "Timing breakdown and full JSON result for performance benchmarking "
+                        "and system integration."
+                    )
                     timings_output = gr.JSON(label="Timing breakdown (seconds)")
                     json_download = gr.File(
                         label="Download full JSON result",
@@ -213,12 +236,15 @@ def build_interface() -> gr.Blocks:
                     )
                 with gr.Tab("Messages"):
                     messages_output = gr.Markdown(
-                        label="Warnings and informational messages",
-                        value="No messages yet.",
+                        label="Image quality and guidance",
+                        value=(
+                            "No issues detected yet. Any warnings about image quality or input "
+                            "will appear here."
+                        ),
                     )
 
         run_button.click(
-            fn=lambda: "Running SenseScan OCR…",
+            fn=lambda: "Running SenseScan OCR… this usually takes a few seconds.",
             inputs=None,
             outputs=status_output,
         ).then(
@@ -242,9 +268,9 @@ def build_interface() -> gr.Blocks:
                 None,
                 "",
                 None,
-                "Idle. Upload a page and click **Run SenseScan OCR**.",
+                "Idle. Upload a Bangla handwritten page on the left and click **Run SenseScan OCR**.",
                 "",
-                "No messages yet.",
+                "No issues detected yet. Any warnings about image quality or input will appear here.",
             ),
             inputs=None,
             outputs=[
