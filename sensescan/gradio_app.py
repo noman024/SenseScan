@@ -181,10 +181,8 @@ def build_interface() -> gr.Blocks:
                 )
                 gr.Examples(
                     examples=[
+                        "test-data/hw.jpg",
                         "test-data/hwrw_133_650_4.jpg",
-                        "test-data/hwrw_265_1131_2.jpg",
-                        "test-data/hwrw_1902_1285_5.jpg",
-                        "test-data/hwrw_115_653_1.jpg",
                     ],
                     inputs=image_input,
                     label="Sample Bangla handwritten pages",
