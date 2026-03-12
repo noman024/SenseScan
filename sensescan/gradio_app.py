@@ -6,7 +6,7 @@ import re
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import cv2
 import gradio as gr
@@ -60,15 +60,14 @@ def _save_artifacts(
 
 def _run_sensescan(
     image: np.ndarray,
-) -> Tuple[str, Dict[str, float]]:
+) -> Tuple[str, Optional[np.ndarray], Dict[str, float], Optional[str]]:
     """
     Core Gradio callback.
 
     - image: RGB numpy array from Gradio.
-    - image_name: original filename (if available).
     """
     if image is None:
-        return "", {}
+        raise gr.Error("Please upload a Bangla handwritten page image to run OCR.")
 
     request_dir = _create_request_dir(None)
     logger.info("gradio request | dir={}", request_dir)
@@ -76,7 +75,7 @@ def _run_sensescan(
     success, buffer = cv2.imencode(".png", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
     if not success:
         logger.error("gradio encode failed")
-        return "", {}
+        raise gr.Error("Internal error while encoding the uploaded image.")
     original_bytes = buffer.tobytes()
 
     bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
@@ -89,7 +88,21 @@ def _run_sensescan(
     _save_artifacts(request_dir, original_bytes, text, segments, timings)
     logger.info("gradio outputs saved | dir={}", request_dir)
 
-    return text, timings
+    # Optional detection overlay visualization
+    overlay_rgb: Optional[np.ndarray] = None
+    overlay_path = request_dir / "detection_boxes.png"
+    if overlay_path.exists():
+        try:
+            overlay_bgr = cv2.imread(str(overlay_path))
+            if overlay_bgr is not None:
+                overlay_rgb = cv2.cvtColor(overlay_bgr, cv2.COLOR_BGR2RGB)
+        except Exception as e:  # pragma: no cover - logging only
+            logger.warning("gradio overlay load failed | path={} error={}", overlay_path, e)
+
+    json_path = request_dir / "ocr.json"
+    json_path_str: Optional[str] = str(json_path) if json_path.exists() else None
+
+    return text, overlay_rgb, timings, json_path_str
 
 
 def build_interface() -> gr.Blocks:
@@ -108,24 +121,46 @@ def build_interface() -> gr.Blocks:
                     type="numpy",
                     image_mode="RGB",
                 )
+                gr.Examples(
+                    examples=["test-data/hwrw_133_650_4.jpg"],
+                    inputs=image_input,
+                    label="Try with a sample handwritten page",
+                )
                 run_button = gr.Button("Run SenseScan OCR", variant="primary")
+                clear_button = gr.Button("Clear")
 
-            with gr.Column(scale=1):
+            with gr.Column(scale=2):
                 with gr.Tab("Text"):
                     text_output = gr.Textbox(
                         label="Recognized text",
                         lines=12,
                         show_copy_button=True,
+                        interactive=False,
                     )
-                with gr.Tab("Timings"):
+                with gr.Tab("Visualization"):
+                    overlay_output = gr.Image(
+                        label="Detected word regions (preview)",
+                        interactive=False,
+                    )
+                with gr.Tab("Timings & JSON"):
                     timings_output = gr.JSON(label="Timing breakdown (seconds)")
+                    json_download = gr.File(
+                        label="Download full JSON result",
+                        interactive=False,
+                    )
 
         run_button.click(
             fn=_run_sensescan,
             inputs=[image_input],
-            outputs=[text_output, timings_output],
+            outputs=[text_output, overlay_output, timings_output, json_download],
             concurrency_limit=4,
             queue=True,
+        )
+
+        clear_button.click(
+            fn=lambda: (None, None, None, None),
+            inputs=None,
+            outputs=[image_input, text_output, overlay_output, timings_output],
         )
 
     return demo
